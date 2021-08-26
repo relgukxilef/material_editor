@@ -1,13 +1,13 @@
 {
     "meshes": {
         "sphere": {
-            "obj_file": "sphere.obj",
+            "file_name": "sphere.obj",
 
-            "positions": {
+            "faces_vertices_position": {
                 "name": "positions",
                 "format": "A2R10G10B10_SNORM_PACK32"
             },
-            "normals": {
+            "faces_vertices_normal": {
                 "name": "normals",
                 "format": "R8G8B8_SNORM"
             }
@@ -17,8 +17,8 @@
     "calls": [
         {
             "shaders": [
-                "my_vertex_shader.glsl",
-                "my_fragment_shader.glsl"
+                "vertex_shader.glsl",
+                "fragment_shader.glsl"
             ],
             "in": {
                 "position": "positions",

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <memory>
+#include <algorithm>
 
 #define GLFW_INCLUDE_VULKAN
 #define GLFW_VULKAN_STATIC
@@ -11,8 +12,38 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "data/document.h"
+#include "rendering/rendering.h"
 
 using namespace std;
+
+template<typename T, auto Deleter>
+struct unique_wrapper {
+    unique_wrapper() : value{} {}
+    unique_wrapper(T&& value) : value(value) {}
+    unique_wrapper(const unique_wrapper&) = delete;
+    unique_wrapper(unique_wrapper&& o) : value(o.value) { o.value = T{}; }
+    ~unique_wrapper() {
+        Deleter(value);
+    }
+    unique_wrapper& operator= (const unique_wrapper&) = delete;
+    unique_wrapper& operator= (unique_wrapper&& o) {
+        Deleter(value);
+        value = o.value;
+        o.value = T{};
+        return *this;
+    }
+
+    T value;
+};
+
+VkDevice *current_device;
+
+void destroy_shader_module(const VkShaderModule& shader_module) {
+    vkDestroyShaderModule(*current_device, shader_module, nullptr);
+}
+
+typedef unique_wrapper<VkShaderModule, destroy_shader_module>
+    unique_shader_module;
 
 VkSampleCountFlagBits max_sample_count;
 
@@ -251,6 +282,7 @@ int main() {
 
     // create queues and logical device
     VkDevice device;
+    current_device = &device;
     {
         float priority = 1.0f;
         VkDeviceQueueCreateInfo queueCreateInfos[]{
@@ -344,7 +376,28 @@ int main() {
         }
     }
 
-    document document = from_file("examples/example.json");
+    std::string document_file_name = "examples/example.json";
+
+    document document = from_file(document_file_name.c_str());
+
+
+    auto file_name = "examples/" + document.calls[0].shader_modules[0];
+
+    renderer renderer;
+
+    std::vector<unique_shader_module> shaders(
+        document.calls[0].shader_modules.size()
+    );
+
+    std::transform(
+        document.calls[0].shader_modules.begin(),
+        document.calls[0].shader_modules.end(), shaders.begin(),
+        [&](const std::string& s) {
+            return create_shader_from_source(
+                renderer, device, ("examples/" + s).c_str()
+            );
+        }
+    );
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -352,6 +405,8 @@ int main() {
         // TODO: swapchain doesn't necessarily sync with current monitor
         // use VK_KHR_display to wait for vsync of current display
     }
+
+    shaders.clear();
 
     vkDestroyCommandPool(device, commandPool, nullptr);
 

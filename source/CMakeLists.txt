@@ -3,11 +3,12 @@ cmake_minimum_required(VERSION 3.5)
 find_program(GLSLC glslc)
 
 add_executable(
-    vulkan main.cpp
-    data/document.h
-    data/document.cpp
+    material_editor main.cpp
+    data/document.h data/document.cpp
+    rendering/rendering.h rendering/rendering.cpp
 )
 
+target_compile_definitions(material_editor PRIVATE _GLIBCXX_DEBUG)
 
 function(add_shader TARGET SHADER)
     find_program(GLSLC glslc)
