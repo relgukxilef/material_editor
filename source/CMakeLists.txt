@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.5)
 
 find_program(GLSLC glslc)
 
-add_executable(vulkan main.cpp)
+add_executable(
+    vulkan main.cpp
+    data/document.h
+    data/document.cpp
+)
 
 
 function(add_shader TARGET SHADER)

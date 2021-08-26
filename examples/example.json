@@ -1,0 +1,42 @@
+{
+    "meshes": {
+        "sphere": {
+            "obj_file": "sphere.obj",
+
+            "positions": {
+                "name": "positions",
+                "format": "A2R10G10B10_SNORM_PACK32"
+            },
+            "normals": {
+                "name": "normals",
+                "format": "R8G8B8_SNORM"
+            }
+        }
+    },
+
+    "calls": [
+        {
+            "shaders": [
+                "my_vertex_shader.glsl",
+                "my_fragment_shader.glsl"
+            ],
+            "in": {
+                "position": "positions",
+                "normal": "normals"
+            },
+            "out": {
+                "color": {
+                    "name": "forward_color",
+                    "format": "RGBA8"
+                }
+            },
+            "uniforms": {
+                "view_matrix": "built_in_view_matrix",
+                "projection_matrix": "built_in_projection_matrix"
+            },
+            "viewport": ["built_in_width", "built_in_height"]
+        }
+    ],
+
+    "display": "forward_color"
+}

@@ -10,6 +10,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "data/document.h"
+
 using namespace std;
 
 VkSampleCountFlagBits max_sample_count;
@@ -341,6 +343,8 @@ int main() {
             throw runtime_error("failed to create command pool");
         }
     }
+
+    document document = from_file("examples/example.json");
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

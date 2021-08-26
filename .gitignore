@@ -6,6 +6,7 @@
 !*.h
 !*.glsl
 
+!*.json
 !*.md
 !*.txt
 
