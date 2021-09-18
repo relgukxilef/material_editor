@@ -6,10 +6,6 @@
 
 using json = nlohmann::json;
 
-document::document() {
-
-}
-
 document from_file(const char* file_name) {
     std::ifstream i(file_name);
     json j;
@@ -18,22 +14,20 @@ document from_file(const char* file_name) {
     document d;
 
 
-    auto& calls = j.at("calls");
-    d.calls.resize(calls.size());
+    auto& actions = j.at("view_actions");
+    d.view_actions.resize(actions.size());
 
-    auto json_call = calls.begin();
-    auto call = d.calls.begin();
+    auto json_call = actions.begin();
+    auto call = d.view_actions.begin();
 
-    for (; json_call != calls.end(); ++json_call, ++call) {
+    for (; json_call != actions.end(); ++json_call, ++call) {
         auto& shaders = json_call.value().at("shaders");
-        call->shader_modules.resize(shaders.size());
 
-        auto json_shader = shaders.begin();
-        auto shader = call->shader_modules.begin();
-
-        for (; json_shader != shaders.end(); ++json_shader, ++shader) {
-            *shader = json_shader.value().get<std::string>();
-        }
+        call->vertex_shader = shaders.at("vertex").get<std::string>();
+        call->fragment_shader = shaders.at("fragment").get<std::string>();
+        call->viewport_width = 1280;
+        call->viewport_height = 720;
+        call->out.push_back({"outColor", {0, texture_usage::present}});
     }
 
     return d;

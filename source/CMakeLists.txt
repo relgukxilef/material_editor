@@ -5,10 +5,13 @@ find_program(GLSLC glslc)
 add_executable(
     material_editor main.cpp
     data/document.h data/document.cpp
-    rendering/rendering.h rendering/rendering.cpp
+    rendering/renderer.h rendering/renderer.cpp
+    rendering/resources.h rendering/resources.cpp
+    rendering/document.h rendering/document.cpp
 )
 
 target_compile_definitions(material_editor PRIVATE _GLIBCXX_DEBUG)
+target_compile_options(material_editor PRIVATE -Wall -Werror)
 
 function(add_shader TARGET SHADER)
     find_program(GLSLC glslc)

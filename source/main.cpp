@@ -12,38 +12,11 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "data/document.h"
-#include "rendering/rendering.h"
+#include "rendering/document.h"
+#include "rendering/resources.h"
+#include "rendering/renderer.h"
 
 using namespace std;
-
-template<typename T, auto Deleter>
-struct unique_wrapper {
-    unique_wrapper() : value{} {}
-    unique_wrapper(T&& value) : value(value) {}
-    unique_wrapper(const unique_wrapper&) = delete;
-    unique_wrapper(unique_wrapper&& o) : value(o.value) { o.value = T{}; }
-    ~unique_wrapper() {
-        Deleter(value);
-    }
-    unique_wrapper& operator= (const unique_wrapper&) = delete;
-    unique_wrapper& operator= (unique_wrapper&& o) {
-        Deleter(value);
-        value = o.value;
-        o.value = T{};
-        return *this;
-    }
-
-    T value;
-};
-
-VkDevice *current_device;
-
-void destroy_shader_module(const VkShaderModule& shader_module) {
-    vkDestroyShaderModule(*current_device, shader_module, nullptr);
-}
-
-typedef unique_wrapper<VkShaderModule, destroy_shader_module>
-    unique_shader_module;
 
 VkSampleCountFlagBits max_sample_count;
 
@@ -64,15 +37,108 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     return VK_FALSE;
 }
 
+struct view {
+    view() = default;
+    view(
+        unsigned width, unsigned heigh, renderer& renderer, document& document,
+        VkDevice device, VkPhysicalDevice physical_device,
+        VkCommandPool command_pool,
+        uint32_t graphics_queue_family, uint32_t present_queue_family,
+        VkSurfaceKHR surface, VkSurfaceFormatKHR surface_format
+    );
+
+    unsigned image_count;
+    VkSurfaceCapabilitiesKHR capabilities;
+    VkExtent2D extent;
+    VkViewport viewport;
+    VkRect2D scissors;
+    unique_swapchain swapchain;
+    std::vector<render_document> documents;
+};
+
+view::view(
+    unsigned width, unsigned height, renderer& renderer, document& document,
+    VkDevice device, VkPhysicalDevice physical_device,
+    VkCommandPool command_pool,
+    uint32_t graphics_queue_family, uint32_t present_queue_family,
+    VkSurfaceKHR surface, VkSurfaceFormatKHR surface_format
+) {
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        physical_device, surface, &capabilities
+    );
+    auto present_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+    extent = {
+        max(
+            min<uint32_t>( width, capabilities.maxImageExtent.width),
+            capabilities.minImageExtent.width
+        ),
+        max(
+            min<uint32_t>(height, capabilities.maxImageExtent.height),
+            capabilities.minImageExtent.height
+        )
+    };
+
+    {
+        uint32_t queue_family_indices[]{
+            graphics_queue_family, present_queue_family
+        };
+        VkSwapchainCreateInfoKHR create_info{
+            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+            .surface = surface,
+            .minImageCount = capabilities.minImageCount,
+            .imageFormat = surface_format.format,
+            .imageColorSpace = surface_format.colorSpace,
+            .imageExtent = extent,
+            .imageArrayLayers = 1,
+            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            .imageSharingMode = VK_SHARING_MODE_CONCURRENT,
+            .queueFamilyIndexCount = size(queue_family_indices),
+            .pQueueFamilyIndices = queue_family_indices,
+            .preTransform = capabilities.currentTransform,
+            .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+            .presentMode = present_mode,
+            .clipped = VK_TRUE,
+            .oldSwapchain = VK_NULL_HANDLE,
+        };
+        if (
+            vkCreateSwapchainKHR(
+                device, &create_info, nullptr, &swapchain.initialize_into()
+            ) != VK_SUCCESS
+        ) {
+            throw std::runtime_error("failed to create swapchain");
+        }
+    }
+
+    // read out actual number of swapchain images
+    vkGetSwapchainImagesKHR(
+        device, swapchain.get(), &image_count, nullptr
+    );
+
+    auto images = std::make_unique<VkImage[]>(image_count);
+    vkGetSwapchainImagesKHR(
+        device, swapchain.get(), &image_count, images.get()
+    );
+
+    documents.reserve(image_count);
+
+    for (auto i = 0u; i < image_count; ++i) {
+        documents.push_back(render_document(
+            document, renderer, images[i], surface_format.format,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, command_pool
+        ));
+    }
+};
+
 int main() {
     glfwInit();
 
-    unsigned windowWidth = 1280, windowHeight = 720;
+    unsigned window_width = 1280, window_height = 720;
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     GLFWwindow* window =
-        glfwCreateWindow(windowWidth, windowHeight, "Vulkan", nullptr, nullptr);
+        glfwCreateWindow(window_width, window_height, "Vulkan", nullptr, nullptr);
 
     // set up error handling
     VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{
@@ -261,11 +327,11 @@ int main() {
         physical_device, &queueFamilyCount, queueFamilies.get()
     );
 
-    uint32_t graphicsQueueFamily = -1u, presentQueueFamily = -1u;
+    uint32_t graphics_queue_family = -1u, present_queue_family = -1u;
     for (auto i = 0u; i < queueFamilyCount; i++) {
         const auto& queueFamily = queueFamilies[i];
         if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            graphicsQueueFamily = i;
+            graphics_queue_family = i;
         }
 
         VkBool32 presentSupport = false;
@@ -273,10 +339,10 @@ int main() {
             physical_device, i, surface, &presentSupport
         );
         if (presentSupport) {
-            presentQueueFamily = i;
+            present_queue_family = i;
         }
     }
-    if (graphicsQueueFamily == -1u) {
+    if (graphics_queue_family == -1u) {
         throw runtime_error("no suitable queue found");
     }
 
@@ -288,12 +354,12 @@ int main() {
         VkDeviceQueueCreateInfo queueCreateInfos[]{
             {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = graphicsQueueFamily,
+                .queueFamilyIndex = graphics_queue_family,
                 .queueCount = 1,
                 .pQueuePriorities = &priority,
             }, {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = presentQueueFamily,
+                .queueFamilyIndex = present_queue_family,
                 .queueCount = 1,
                 .pQueuePriorities = &priority,
             }
@@ -323,10 +389,10 @@ int main() {
 
     // retreive queues
     VkQueue graphicsQueue, presentQueue;
-    vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, presentQueueFamily, 0, &presentQueue);
+    vkGetDeviceQueue(device, graphics_queue_family, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, present_queue_family, 0, &presentQueue);
 
-    // create swap chains
+    // create swap chain
     uint32_t formatCount = 0, presentModeCount = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(
         physical_device, surface, &formatCount, nullptr
@@ -350,26 +416,26 @@ int main() {
         physical_device, surface, &presentModeCount, presentModes.get()
     );
 
-    auto surfaceFormat = formats[0];
+    auto surface_format = formats[0];
     for (auto i = 0u; i < formatCount; i++) {
         auto format = formats[i];
         if (
             format.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
             format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
         ) {
-            surfaceFormat = format;
+            surface_format = format;
         }
     }
 
     // create command pool
-    VkCommandPool commandPool;
+    VkCommandPool command_pool;
     {
         VkCommandPoolCreateInfo createInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .queueFamilyIndex = graphicsQueueFamily,
+            .queueFamilyIndex = graphics_queue_family,
         };
         if (
-            vkCreateCommandPool(device, &createInfo, nullptr, &commandPool) !=
+            vkCreateCommandPool(device, &createInfo, nullptr, &command_pool) !=
             VK_SUCCESS
         ) {
             throw runtime_error("failed to create command pool");
@@ -380,35 +446,123 @@ int main() {
 
     document document = from_file(document_file_name.c_str());
 
-
-    auto file_name = "examples/" + document.calls[0].shader_modules[0];
-
     renderer renderer;
 
-    std::vector<unique_shader_module> shaders(
-        document.calls[0].shader_modules.size()
-    );
+    {
+        view view(
+            window_width, window_height, renderer, document,
+            device, physical_device,
+            command_pool, graphics_queue_family, present_queue_family,
+            surface, surface_format
+        );
 
-    std::transform(
-        document.calls[0].shader_modules.begin(),
-        document.calls[0].shader_modules.end(), shaders.begin(),
-        [&](const std::string& s) {
-            return create_shader_from_source(
-                renderer, device, ("examples/" + s).c_str()
+        unique_semaphore swapchain_image_ready_semaphore;
+        {
+            VkSemaphoreCreateInfo semaphore_info = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            };
+            vkCreateSemaphore(
+                device, &semaphore_info, nullptr,
+                &swapchain_image_ready_semaphore.initialize_into()
             );
         }
-    );
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+        while (!glfwWindowShouldClose(window)) {
+            glfwPollEvents();
 
-        // TODO: swapchain doesn't necessarily sync with current monitor
-        // use VK_KHR_display to wait for vsync of current display
+            // get next image from swapchain
+            uint32_t image_index;
+            auto result = vkAcquireNextImageKHR(
+                device, view.swapchain.get(), -1ul,
+                swapchain_image_ready_semaphore.get(),
+                VK_NULL_HANDLE,
+                &image_index
+            );
+
+            if (result == VK_SUCCESS) {
+                auto& document = view.documents[image_index];
+                VkFence fence = document.fence.get();
+                vkWaitForFences(device, 1, &fence, VK_TRUE, -1ul);
+                vkResetFences(device, 1, &fence);
+
+                // submit command buffer
+                VkPipelineStageFlags wait_stage =
+                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                VkSemaphore render_finished_semaphore =
+                    document.render_finished_semaphore.get();
+                VkSemaphore wait_semaphore =
+                    swapchain_image_ready_semaphore.get();
+                VkSubmitInfo submitInfo = {
+                    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    .waitSemaphoreCount = 1,
+                    .pWaitSemaphores = &wait_semaphore,
+                    .pWaitDstStageMask = &wait_stage,
+                    .commandBufferCount = 1,
+                    .pCommandBuffers = &document.command_buffer,
+                    .signalSemaphoreCount = 1,
+                    .pSignalSemaphores = &render_finished_semaphore,
+                };
+                if (
+                    vkQueueSubmit(
+                        graphicsQueue, 1, &submitInfo, fence
+                    ) != VK_SUCCESS
+                ) {
+                    throw runtime_error("failed to submit draw command buffer");
+                }
+
+                auto swapchain = view.swapchain.get();
+
+                // present image
+                VkPresentInfoKHR presentInfo{
+                    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                    .waitSemaphoreCount = 1,
+                    .pWaitSemaphores = &render_finished_semaphore,
+                    .swapchainCount = 1,
+                    .pSwapchains = &swapchain,
+                    .pImageIndices = &image_index,
+                };
+                vkQueuePresentKHR(presentQueue, &presentInfo);
+
+            } else if (
+                result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR
+            ) {
+                for (auto& document : view.documents) {
+                    auto fence = document.fence.get();
+                    vkWaitForFences(device, 1, &fence, VK_TRUE, -1ul);
+                }
+
+                int framebuffer_width, framebuffer_height;
+                glfwGetFramebufferSize(
+                    window, &framebuffer_width, &framebuffer_height
+                );
+                if (framebuffer_height > 0 && framebuffer_width > 0) {
+                    // destroy view first
+                    view = {};
+                    view = {
+                        window_width, window_height, renderer, document,
+                        device, physical_device,
+                        command_pool, graphics_queue_family,
+                        present_queue_family,
+                        surface, surface_format
+                    };
+                }
+
+            } else {
+                throw runtime_error("failed to acquire sawp chain image");
+            }
+
+            // TODO: swapchain doesn't necessarily sync with current monitor
+            // use VK_KHR_display to wait for vsync of current display
+        }
+
+        // TODO: destructors don't wait on exception
+        for(auto& document : view.documents) {
+            auto fence = document.fence.get();
+            vkWaitForFences(device, 1, &fence, VK_TRUE, -1u);
+        }
     }
 
-    shaders.clear();
-
-    vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyCommandPool(device, command_pool, nullptr);
 
     vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyDevice(device, nullptr);

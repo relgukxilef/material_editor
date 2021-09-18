@@ -5,6 +5,8 @@
 #include <vulkan/vulkan.h>
 #include <shaderc/shaderc.hpp>
 
+#include "resources.h"
+
 struct renderer {
     renderer();
 
@@ -13,5 +15,6 @@ struct renderer {
 };
 
 VkShaderModule create_shader_from_source(
-    renderer& renderer, VkDevice device, const char* file_name
+    const renderer &renderer, VkDevice device, const char* file_name,
+    shaderc_shader_kind kind
 );

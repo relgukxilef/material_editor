@@ -1,4 +1,4 @@
-#include "rendering.h"
+#include "renderer.h"
 
 #include <fstream>
 #include <vector>
@@ -15,7 +15,8 @@ renderer::renderer() {
 }
 
 VkShaderModule create_shader_from_source(
-    renderer &renderer, VkDevice device, const char *file_name
+    const renderer &renderer, VkDevice device, const char *file_name,
+    shaderc_shader_kind kind
 ) {
     std::ifstream file(file_name, std::ios::ate | std::ios::binary);
 
@@ -32,7 +33,7 @@ VkShaderModule create_shader_from_source(
     file.read(source.data(), size);
 
     auto compilation = renderer.compiler.CompileGlslToSpv(
-        source.data(), source.size(), shaderc_glsl_infer_from_source,
+        source.data(), source.size(), kind,
         file_name, renderer.compiler_options
     );
 
