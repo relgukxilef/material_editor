@@ -1,11 +1,12 @@
 #include "document.h"
 
 render_document::render_document(
+    unsigned width, unsigned height,
     const document &document, const renderer &renderer,
     VkImage output, VkFormat output_format, VkImageLayout output_layout,
     VkCommandPool graphics_command_pool
 
-) : view_actions(document.view_actions.size()) {
+) : width(width), height(height), view_actions(document.view_actions.size()) {
 
     VkFenceCreateInfo fence_info = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -105,14 +106,14 @@ render_document::render_document(
         VkViewport viewport = {
             .x = 0.0f,
             .y = 0.0f,
-            .width = 1280.0f, // TODO
-            .height = 720.0f,
+            .width = static_cast<float>(width), // TODO
+            .height = static_cast<float>(height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
         VkRect2D scissors = {
             .offset = {0, 0},
-            .extent = {1280, 720},
+            .extent = {width, height},
         };
         VkPipelineViewportStateCreateInfo viewport_info = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -180,7 +181,7 @@ render_document::render_document(
                 attachments[i] = VkAttachmentDescription{
                     .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
                     .samples = VK_SAMPLE_COUNT_1_BIT,
-                    .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                    .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                     .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -253,8 +254,8 @@ render_document::render_document(
             .renderPass = render_pass.get(),
             .attachmentCount = static_cast<uint32_t>(action.out.size()),
             .pAttachments = &output_view,
-            .width = action.viewport_width,
-            .height = action.viewport_height,
+            .width = width,
+            .height = height,
             .layers = 1,
         };
         unique_framebuffer framebuffer;
@@ -267,10 +268,17 @@ render_document::render_document(
             throw std::runtime_error("Failed to create framebuffer");
         }
 
+        VkClearValue clear_value = {{{1.0f, 1.0f, 1.0f, 1.0f}}};
         VkRenderPassBeginInfo render_pass_begin_info = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = render_pass.get(),
             .framebuffer = framebuffer.get(),
+            .renderArea = {
+                .offset = {0, 0},
+                .extent = {width, height},
+            },
+            .clearValueCount = 1,
+            .pClearValues = &clear_value,
         };
         vkCmdBeginRenderPass(
             command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE

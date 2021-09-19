@@ -25,6 +25,7 @@ struct render_texture {
 struct render_document {
     // is dependent on swapchain image and re-created on resolution changes
     render_document(
+        unsigned width, unsigned height,
         const document& document, const renderer &renderer, VkImage output,
         VkFormat output_format, VkImageLayout output_layout,
         VkCommandPool graphics_command_pool

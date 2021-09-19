@@ -27,9 +27,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     void*
 ) {
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-        //throw runtime_error("vulkan error");
-        // can't throw because Nsight causes errors I don't care about
         cerr << "validation layer error: " << callbackData->pMessage << endl;
+        if (strcmp(callbackData->pMessageIdName, "Loader Message") != 0)
+            throw runtime_error("vulkan error");
+        // can't throw because Nsight causes errors I don't care about
     } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
         cout << "validation layer warning: " << callbackData->pMessage << endl;
     }
@@ -70,7 +71,7 @@ view::view(
 
     extent = {
         max(
-            min<uint32_t>( width, capabilities.maxImageExtent.width),
+            min<uint32_t>(width, capabilities.maxImageExtent.width),
             capabilities.minImageExtent.width
         ),
         max(
@@ -124,8 +125,9 @@ view::view(
 
     for (auto i = 0u; i < image_count; ++i) {
         documents.push_back(render_document(
-            document, renderer, images[i], surface_format.format,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, command_pool
+            width, height, document, renderer, images[i],
+            surface_format.format, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            command_pool
         ));
     }
 };
@@ -133,12 +135,13 @@ view::view(
 int main() {
     glfwInit();
 
-    unsigned window_width = 1280, window_height = 720;
+    unsigned initial_window_width = 1280, initial_window_height = 720;
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    GLFWwindow* window =
-        glfwCreateWindow(window_width, window_height, "Vulkan", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(
+        initial_window_width, initial_window_height, "Vulkan", nullptr, nullptr
+    );
 
     // set up error handling
     VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{
@@ -449,12 +452,18 @@ int main() {
     renderer renderer;
 
     {
-        view view(
-            window_width, window_height, renderer, document,
+        int framebuffer_width, framebuffer_height;
+        glfwGetFramebufferSize(
+            window, &framebuffer_width, &framebuffer_height
+        );
+        view view = {
+            static_cast<unsigned int>(framebuffer_width),
+            static_cast<unsigned int>(framebuffer_height),
+            renderer, document,
             device, physical_device,
             command_pool, graphics_queue_family, present_queue_family,
             surface, surface_format
-        );
+        };
 
         unique_semaphore swapchain_image_ready_semaphore;
         {
@@ -537,9 +546,13 @@ int main() {
                 );
                 if (framebuffer_height > 0 && framebuffer_width > 0) {
                     // destroy view first
+                    // TODO: this destroys members in construction order, not
+                    // destruction order
                     view = {};
                     view = {
-                        window_width, window_height, renderer, document,
+                        static_cast<unsigned int>(framebuffer_width),
+                        static_cast<unsigned int>(framebuffer_height),
+                        renderer, document,
                         device, physical_device,
                         command_pool, graphics_queue_family,
                         present_queue_family,
