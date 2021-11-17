@@ -104,7 +104,7 @@ view::view(
         };
         if (
             vkCreateSwapchainKHR(
-                device, &create_info, nullptr, &swapchain.initialize_into()
+                device, &create_info, nullptr, out_ptr(swapchain)
             ) != VK_SUCCESS
         ) {
             throw std::runtime_error("failed to create swapchain");
@@ -472,7 +472,7 @@ int main() {
             };
             vkCreateSemaphore(
                 device, &semaphore_info, nullptr,
-                &swapchain_image_ready_semaphore.initialize_into()
+                out_ptr(swapchain_image_ready_semaphore)
             );
         }
 

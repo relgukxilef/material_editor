@@ -6,10 +6,12 @@ extern VkDevice *current_device;
 
 template<typename T, auto Deleter>
 struct unique_vulkan_resource {
+    typedef T pointer;
+
     unique_vulkan_resource() : value(VK_NULL_HANDLE) {}
     unique_vulkan_resource(T value) : value(value) {}
     unique_vulkan_resource(const unique_vulkan_resource&) = delete;
-    unique_vulkan_resource(unique_vulkan_resource&& o) : value(o.value) {
+    unique_vulkan_resource(unique_vulkan_resource &&o) : value(o.value) {
         o.value = VK_NULL_HANDLE;
     }
     ~unique_vulkan_resource() {
@@ -17,7 +19,7 @@ struct unique_vulkan_resource {
             Deleter(*current_device, value, nullptr);
     }
     unique_vulkan_resource& operator= (const unique_vulkan_resource&) = delete;
-    unique_vulkan_resource& operator= (unique_vulkan_resource&& o) {
+    unique_vulkan_resource& operator= (unique_vulkan_resource &&o) {
         if (value != VK_NULL_HANDLE)
             Deleter(*current_device, value, nullptr);
         value = o.value;
@@ -28,12 +30,6 @@ struct unique_vulkan_resource {
     T get() {
         return value;
     };
-
-    T& initialize_into() {
-        if (value != VK_NULL_HANDLE)
-            Deleter(*current_device, value, nullptr);
-        return value;
-    }
 
 private:
     T value;
@@ -69,3 +65,19 @@ typedef unique_vulkan_resource<VkSemaphore, vkDestroySemaphore>
 
 typedef unique_vulkan_resource<VkSwapchainKHR, vkDestroySwapchainKHR>
     unique_swapchain;
+
+template<class Smart, class Pointer>
+struct out_ptr_t {
+    out_ptr_t(Smart &smart) : smart(smart) {}
+    ~out_ptr_t() { smart = Smart(pointer); }
+
+    operator Pointer*() { return &pointer; }
+
+    Smart &smart;
+    Pointer pointer;
+};
+
+template<class Smart>
+out_ptr_t<Smart, typename Smart::pointer> out_ptr(Smart &smart) {
+    return { smart };
+}

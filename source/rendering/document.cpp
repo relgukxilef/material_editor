@@ -12,14 +12,14 @@ render_document::render_document(
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
     };
     vkCreateFence(
-        *current_device, &fence_info, nullptr, &fence.initialize_into()
+        *current_device, &fence_info, nullptr, out_ptr(fence)
     );
     VkSemaphoreCreateInfo semaphore_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
     vkCreateSemaphore(
         *current_device, &semaphore_info, nullptr,
-        &render_finished_semaphore.initialize_into()
+        out_ptr(render_finished_semaphore)
     );
 
     for (size_t i = 0; i < document.textures.size(); i++) {
@@ -62,7 +62,7 @@ render_document::render_document(
     };
     vkCreateImageView(
         *current_device, &image_view_info, nullptr,
-        &this->output_view.initialize_into()
+        out_ptr(this->output_view)
     );
 
     for (size_t i = 0; i < document.view_actions.size(); i++) {
@@ -155,7 +155,7 @@ render_document::render_document(
         if (
             vkCreatePipelineLayout(
                 *current_device, &pipeline_layout_info, nullptr,
-                &pipeline_layout.initialize_into()
+                out_ptr(pipeline_layout)
             ) != VK_SUCCESS
         ) {
             throw std::runtime_error("Failed to create pipeline layout");
@@ -215,7 +215,7 @@ render_document::render_document(
         if (
             vkCreateRenderPass(
                 *current_device, &render_pass_info, nullptr,
-                &render_pass.initialize_into()
+                out_ptr(render_pass)
             ) != VK_SUCCESS
         ) {
             throw std::runtime_error("Failed to create render pass");
@@ -241,7 +241,7 @@ render_document::render_document(
         if (
             vkCreateGraphicsPipelines(
                 *current_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
-                &pipeline.initialize_into()
+                out_ptr(pipeline)
             ) != VK_SUCCESS
         ) {
             throw std::runtime_error("Failed to create pipeline");
@@ -262,7 +262,7 @@ render_document::render_document(
         if (
             vkCreateFramebuffer(
                 *current_device, &framebuffer_info, nullptr,
-                &framebuffer.initialize_into()
+                out_ptr(framebuffer)
             ) != VK_SUCCESS
         ) {
             throw std::runtime_error("Failed to create framebuffer");
