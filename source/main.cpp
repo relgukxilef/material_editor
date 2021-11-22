@@ -102,13 +102,9 @@ view::view(
             .clipped = VK_TRUE,
             .oldSwapchain = VK_NULL_HANDLE,
         };
-        if (
-            vkCreateSwapchainKHR(
-                device, &create_info, nullptr, out_ptr(swapchain)
-            ) != VK_SUCCESS
-        ) {
-            throw std::runtime_error("failed to create swapchain");
-        }
+        check(vkCreateSwapchainKHR(
+            device, &create_info, nullptr, out_ptr(swapchain)
+        ));
     }
 
     // read out actual number of swapchain images
@@ -231,9 +227,7 @@ int main() {
             .enabledExtensionCount = static_cast<uint32_t>(extensionCount),
             .ppEnabledExtensionNames = extensions.get(),
         };
-        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw runtime_error("failed to create instance");
-        }
+        check(vkCreateInstance(&createInfo, nullptr, &instance));
     }
 
     // create debug utils messenger
@@ -259,23 +253,14 @@ int main() {
                 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
             .pfnUserCallback = debug_callback,
         };
-        if (
-            vkCreateDebugUtilsMessengerEXT(
-                instance, &createInfo, nullptr, &debugUtilsMessenger
-            ) != VK_SUCCESS
-        ) {
-            throw runtime_error("failed to create debug utils messenger");
-        }
+        check(vkCreateDebugUtilsMessengerEXT(
+            instance, &createInfo, nullptr, &debugUtilsMessenger
+        ));
     }
 
     // create surface
     VkSurfaceKHR surface;
-    if (
-        glfwCreateWindowSurface(instance, window, nullptr, &surface) !=
-        VK_SUCCESS
-    ) {
-        throw runtime_error("failed to create window surface");
-    }
+    check(glfwCreateWindowSurface(instance, window, nullptr, &surface));
 
     // look for available devices
     VkPhysicalDevice physical_device;
@@ -382,12 +367,7 @@ int main() {
             .pEnabledFeatures = &deviceFeatures
         };
 
-        if (
-            vkCreateDevice(physical_device, &createInfo, nullptr, &device) !=
-            VK_SUCCESS
-        ) {
-            throw runtime_error("failed to create logical device");
-        }
+        check(vkCreateDevice(physical_device, &createInfo, nullptr, &device));
     }
 
     // retreive queues
@@ -437,12 +417,7 @@ int main() {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .queueFamilyIndex = graphics_queue_family,
         };
-        if (
-            vkCreateCommandPool(device, &createInfo, nullptr, &command_pool) !=
-            VK_SUCCESS
-        ) {
-            throw runtime_error("failed to create command pool");
-        }
+        check(vkCreateCommandPool(device, &createInfo, nullptr, &command_pool));
     }
 
     std::string document_file_name = "examples/example.json";
@@ -511,13 +486,7 @@ int main() {
                     .signalSemaphoreCount = 1,
                     .pSignalSemaphores = &render_finished_semaphore,
                 };
-                if (
-                    vkQueueSubmit(
-                        graphicsQueue, 1, &submitInfo, fence
-                    ) != VK_SUCCESS
-                ) {
-                    throw runtime_error("failed to submit draw command buffer");
-                }
+                check(vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence));
 
                 auto swapchain = view.swapchain.get();
 
@@ -533,7 +502,8 @@ int main() {
                 vkQueuePresentKHR(presentQueue, &presentInfo);
 
             } else if (
-                result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR
+                result == VK_SUBOPTIMAL_KHR ||
+                result == VK_ERROR_OUT_OF_DATE_KHR
             ) {
                 for (auto& document : view.documents) {
                     auto fence = document.fence.get();
@@ -561,7 +531,7 @@ int main() {
                 }
 
             } else {
-                throw runtime_error("failed to acquire sawp chain image");
+                check(result);
             }
 
             // TODO: swapchain doesn't necessarily sync with current monitor

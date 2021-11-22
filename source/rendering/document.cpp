@@ -32,20 +32,14 @@ render_document::render_document(
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    if (
-        vkAllocateCommandBuffers(
-            *current_device, &command_buffer_info, &command_buffer
-        ) != VK_SUCCESS
-    ) {
-        throw std::runtime_error("Failed to allocate command buffer");
-    }
+    check(vkAllocateCommandBuffers(
+        *current_device, &command_buffer_info, &command_buffer
+    ));
 
     VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
-    if (vkBeginCommandBuffer(command_buffer, &begin_info) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to begin recording command buffer");
-    }
+    check(vkBeginCommandBuffer(command_buffer, &begin_info));
 
     VkImageViewCreateInfo image_view_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -152,14 +146,10 @@ render_document::render_document(
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         };
         unique_pipeline_layout pipeline_layout;
-        if (
-            vkCreatePipelineLayout(
-                *current_device, &pipeline_layout_info, nullptr,
-                out_ptr(pipeline_layout)
-            ) != VK_SUCCESS
-        ) {
-            throw std::runtime_error("Failed to create pipeline layout");
-        }
+        check(vkCreatePipelineLayout(
+            *current_device, &pipeline_layout_info, nullptr,
+            out_ptr(pipeline_layout)
+        ));
 
         auto attachments =
             std::make_unique<VkAttachmentDescription[]>(action.out.size());
@@ -212,14 +202,10 @@ render_document::render_document(
             .pSubpasses = &subpass,
         };
         unique_render_pass render_pass;
-        if (
-            vkCreateRenderPass(
-                *current_device, &render_pass_info, nullptr,
-                out_ptr(render_pass)
-            ) != VK_SUCCESS
-        ) {
-            throw std::runtime_error("Failed to create render pass");
-        }
+        check(vkCreateRenderPass(
+            *current_device, &render_pass_info, nullptr,
+            out_ptr(render_pass)
+        ));
 
         VkGraphicsPipelineCreateInfo pipeline_info = {
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -238,14 +224,10 @@ render_document::render_document(
             .basePipelineIndex = -1,
         };
         unique_pipeline pipeline;
-        if (
-            vkCreateGraphicsPipelines(
-                *current_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
-                out_ptr(pipeline)
-            ) != VK_SUCCESS
-        ) {
-            throw std::runtime_error("Failed to create pipeline");
-        }
+        check(vkCreateGraphicsPipelines(
+            *current_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr,
+            out_ptr(pipeline)
+        ));
 
         // TODO: some actions could share framebuffer
         VkImageView output_view = this->output_view.get();
@@ -259,14 +241,10 @@ render_document::render_document(
             .layers = 1,
         };
         unique_framebuffer framebuffer;
-        if (
-            vkCreateFramebuffer(
-                *current_device, &framebuffer_info, nullptr,
-                out_ptr(framebuffer)
-            ) != VK_SUCCESS
-        ) {
-            throw std::runtime_error("Failed to create framebuffer");
-        }
+        check(vkCreateFramebuffer(
+            *current_device, &framebuffer_info, nullptr,
+            out_ptr(framebuffer)
+        ));
 
         VkClearValue clear_value = {{{1.0f, 1.0f, 1.0f, 1.0f}}};
         VkRenderPassBeginInfo render_pass_begin_info = {
@@ -297,7 +275,5 @@ render_document::render_document(
         };
     }
 
-    if (vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to record command buffer");
-    }
+    check(vkEndCommandBuffer(command_buffer));
 }
