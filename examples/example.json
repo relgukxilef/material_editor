@@ -14,15 +14,26 @@
         }
     },
 
+    "textures": {
+        "density_input": {
+            "size": ["built_in_window_width", "built_in_window_height"]
+        },
+        "density_output": {
+            "size": ["built_in_window_width", "built_in_window_height"]
+        }
+    },
+
     "frame_actions": [
     ],
 
     "view_actions": [
         {
+            "type": "program",
             "shaders": {
                 "vertex": "vertex_shader.glsl",
                 "fragment": "fragment_shader.glsl"
             },
+            "vertex_count": 4,
             "in": {
                 "position": "positions",
                 "normal": "normals"
@@ -31,10 +42,13 @@
                 "color": "built_in_window"
             },
             "uniforms": {
-                "view_matrix": "built_in_view_matrix",
-                "projection_matrix": "built_in_projection_matrix"
+                "color": [0.35, 0.62, 0.95, 1.0]
             },
             "viewport": ["built_in_window_width", "built_in_window_height"]
+        }, {
+            "type": "blit",
+            "source": "density_output",
+            "destination": "density_input"
         }
     ]
 }

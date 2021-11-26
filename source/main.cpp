@@ -28,9 +28,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 ) {
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         cerr << "validation layer error: " << callbackData->pMessage << endl;
+        // ignore error caused by Nsight
         if (strcmp(callbackData->pMessageIdName, "Loader Message") != 0)
             throw runtime_error("vulkan error");
-        // can't throw because Nsight causes errors I don't care about
     } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
         cout << "validation layer warning: " << callbackData->pMessage << endl;
     }
@@ -126,7 +126,7 @@ view::view(
             command_pool
         ));
     }
-};
+}
 
 int main() {
     glfwInit();
@@ -425,6 +425,11 @@ int main() {
     document document = from_file(document_file_name.c_str());
 
     renderer renderer;
+    renderer.graphics_queue_family = graphics_queue_family;
+    renderer.present_queue_family = present_queue_family;
+    vkGetPhysicalDeviceMemoryProperties(
+        physical_device, &renderer.physical_device_memory_properties
+    );
 
     {
         int framebuffer_width, framebuffer_height;
@@ -516,9 +521,10 @@ int main() {
                 );
                 if (framebuffer_height > 0 && framebuffer_width > 0) {
                     // destroy view first
-                    // TODO: this destroys members in construction order, not
-                    // destruction order
-                    view = {};
+                    {
+                        ::view old;
+                        std::swap(old, view);
+                    }
                     view = {
                         static_cast<unsigned int>(framebuffer_width),
                         static_cast<unsigned int>(framebuffer_height),

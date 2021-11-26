@@ -1,90 +1,160 @@
 #include "document.h"
 
-render_document::render_document(
-    unsigned width, unsigned height,
-    const document &document, const renderer &renderer,
-    VkImage output, VkFormat output_format, VkImageLayout output_layout,
-    VkCommandPool graphics_command_pool
+struct compile_action_functor {
+    const renderer &renderer;
+    render_document &document;
+    VkImageLayout output_layout;
 
-) : width(width), height(height), view_actions(document.view_actions.size()) {
+    void operator() (const std::unique_ptr<program_action> &action_pointer) {
+        auto &action = *action_pointer;
 
-    VkFenceCreateInfo fence_info = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    vkCreateFence(
-        *current_device, &fence_info, nullptr, out_ptr(fence)
-    );
-    VkSemaphoreCreateInfo semaphore_info = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-    };
-    vkCreateSemaphore(
-        *current_device, &semaphore_info, nullptr,
-        out_ptr(render_finished_semaphore)
-    );
-
-    for (size_t i = 0; i < document.textures.size(); i++) {
-        // TODO: create images and image views
-    }
-
-    VkCommandBufferAllocateInfo command_buffer_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = graphics_command_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    check(vkAllocateCommandBuffers(
-        *current_device, &command_buffer_info, &command_buffer
-    ));
-
-    VkCommandBufferBeginInfo begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    check(vkBeginCommandBuffer(command_buffer, &begin_info));
-
-    VkImageViewCreateInfo image_view_info = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = output,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = output_format,
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        }
-    };
-    vkCreateImageView(
-        *current_device, &image_view_info, nullptr,
-        out_ptr(this->output_view)
-    );
-
-    for (size_t i = 0; i < document.view_actions.size(); i++) {
-        // TODO: multi-thread shader compilation
-        // TODO: multi-thread pipeline compilation
-        auto& action = document.view_actions[i];
-
-        unique_shader_module vertex_shader = create_shader_from_source(
+        reflected_shader_module vertex_shader = create_shader_from_source(
             renderer, *current_device,
             ("examples/" + action.vertex_shader).c_str(), // TODO
             shaderc_glsl_vertex_shader
         );
-        unique_shader_module fragment_shader = create_shader_from_source(
+        reflected_shader_module fragment_shader = create_shader_from_source(
             renderer, *current_device,
             ("examples/" + action.fragment_shader).c_str(), // TODO
             shaderc_glsl_fragment_shader
+        );
+
+        VkDescriptorSetLayoutBinding descriptor_set_layout_binding = {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
+        };
+        VkDescriptorSetLayoutCreateInfo descriptor_set_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 1,
+            .pBindings = &descriptor_set_layout_binding,
+        };
+        unique_descriptor_set_layout descriptor_set_layout;
+        check(vkCreateDescriptorSetLayout(
+            *current_device, &descriptor_set_info,
+            nullptr, out_ptr(descriptor_set_layout)
+        ));
+
+        uint32_t queue_family_index = renderer.graphics_queue_family;
+        VkBufferCreateInfo uniform_buffer_info = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .size = vertex_shader.descriptor_size,
+            .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 1,
+            .pQueueFamilyIndices = &queue_family_index,
+        };
+        unique_buffer uniform_buffer;
+        unique_device_memory uniform_memory;
+        void* uniform_data;
+        if (vertex_shader.descriptor_size > 0) {
+            check(vkCreateBuffer(
+                *current_device, &uniform_buffer_info, nullptr,
+                out_ptr(uniform_buffer)
+            ));
+            VkMemoryRequirements memory_requirements;
+            vkGetBufferMemoryRequirements(
+                *current_device, uniform_buffer.get(), &memory_requirements
+            );
+            VkMemoryPropertyFlags properties =
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            uint32_t memory_type_index;
+            for (
+                memory_type_index = 0;
+                memory_type_index <
+                renderer.physical_device_memory_properties.memoryTypeCount;
+                memory_type_index++
+            ) {
+                if (
+                    (
+                        memory_requirements.memoryTypeBits &
+                        (1 << memory_type_index)
+                    ) && (
+                        renderer.physical_device_memory_properties.memoryTypes[
+                            memory_type_index
+                        ].propertyFlags &
+                        properties
+                    )
+                )
+                    break;
+            }
+            VkMemoryAllocateInfo allocate_info = {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = memory_requirements.size,
+                .memoryTypeIndex = memory_type_index,
+            };
+            check(vkAllocateMemory(
+                *current_device, &allocate_info, nullptr,
+                out_ptr(uniform_memory)
+            ));
+            check(vkBindBufferMemory(
+                *current_device, uniform_buffer.get(), uniform_memory.get(), 0
+            ));
+
+            vkMapMemory(
+                *current_device, uniform_memory.get(), 0,
+                vertex_shader.descriptor_size, 0, &uniform_data
+            );
+            std::array<float, 4> color = {0.5, 1.0, 1.0, 0.0};
+            memcpy(uniform_data, color.begin(), sizeof(color));
+        }
+
+        VkDescriptorPoolSize pool_size = {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1, // TODO: share between swap chain images
+        };
+        VkDescriptorPoolCreateInfo pool_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .maxSets = 1,  // TODO: share between swap chain images
+            .poolSizeCount = 1,
+            .pPoolSizes = &pool_size,
+        };
+        unique_descriptor_pool descriptor_pool;
+        check(vkCreateDescriptorPool(
+            *current_device, &pool_info, nullptr, out_ptr(descriptor_pool))
+        );
+
+        VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = descriptor_pool.get(),
+            .descriptorSetCount = 1, // TODO: share between swap chain images
+            .pSetLayouts = &descriptor_set_layout.get(),
+        };
+        VkDescriptorSet descriptor_set;
+        check(vkAllocateDescriptorSets(
+            *current_device, &descriptor_set_allocate_info, &descriptor_set
+        ));
+
+        VkDescriptorBufferInfo descriptor_buffer_info = {
+            .buffer = uniform_buffer.get(),
+            .offset = 0,
+            .range = vertex_shader.descriptor_size,
+        };
+        VkWriteDescriptorSet write_descriptor_set = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptor_set,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &descriptor_buffer_info,
+        };
+        vkUpdateDescriptorSets(
+            *current_device, 1, &write_descriptor_set, 0, nullptr
         );
 
         VkPipelineShaderStageCreateInfo pipeline_shader_stage_info[] = {
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_VERTEX_BIT,
-                .module = vertex_shader.get(),
+                .module = vertex_shader.module.get(),
                 .pName = "main",
             }, {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .module = fragment_shader.get(),
+                .module = fragment_shader.module.get(),
                 .pName = "main",
             },
         };
@@ -94,20 +164,20 @@ render_document::render_document(
         VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
             .sType =
                 VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
             .primitiveRestartEnable = VK_FALSE,
         };
         VkViewport viewport = {
             .x = 0.0f,
             .y = 0.0f,
-            .width = static_cast<float>(width), // TODO
-            .height = static_cast<float>(height),
+            .width = static_cast<float>(document.width), // TODO
+            .height = static_cast<float>(document.height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
         VkRect2D scissors = {
             .offset = {0, 0},
-            .extent = {width, height},
+            .extent = {document.width, document.height},
         };
         VkPipelineViewportStateCreateInfo viewport_info = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -142,8 +212,11 @@ render_document::render_document(
             .attachmentCount = 1,
             .pAttachments = &color_blend_attachment,
         };
+        VkDescriptorSetLayout layouts[] = { descriptor_set_layout.get() };
         VkPipelineLayoutCreateInfo pipeline_layout_info = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 1,
+            .pSetLayouts = layouts,
         };
         unique_pipeline_layout pipeline_layout;
         check(vkCreatePipelineLayout(
@@ -158,15 +231,10 @@ render_document::render_document(
 
         {
             int i = 0;
-            for (auto& [name, texture] : action.out) {
+            for (auto& out : action.out) {
+                (void)out;
                 VkImageLayout final_layout;
-                if (texture.next_usage == texture_usage::present) {
-                    final_layout = output_layout;
-                } else if (texture.next_usage == texture_usage::draw) {
-                    final_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                } else {
-                    final_layout = VK_IMAGE_LAYOUT_GENERAL;
-                }
+                final_layout = output_layout;
 
                 attachments[i] = VkAttachmentDescription{
                     .format = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
@@ -230,14 +298,14 @@ render_document::render_document(
         ));
 
         // TODO: some actions could share framebuffer
-        VkImageView output_view = this->output_view.get();
+        VkImageView output_view = document.output_view.get();
         VkFramebufferCreateInfo framebuffer_info = {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = render_pass.get(),
             .attachmentCount = static_cast<uint32_t>(action.out.size()),
             .pAttachments = &output_view,
-            .width = width,
-            .height = height,
+            .width = document.width,
+            .height = document.height,
             .layers = 1,
         };
         unique_framebuffer framebuffer;
@@ -253,26 +321,112 @@ render_document::render_document(
             .framebuffer = framebuffer.get(),
             .renderArea = {
                 .offset = {0, 0},
-                .extent = {width, height},
+                .extent = {document.width, document.height},
             },
             .clearValueCount = 1,
             .pClearValues = &clear_value,
         };
         vkCmdBeginRenderPass(
-            command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE
+            document.command_buffer, &render_pass_begin_info,
+            VK_SUBPASS_CONTENTS_INLINE
         );
         vkCmdBindPipeline(
-            command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get()
+            document.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline.get()
         );
-        vkCmdDraw(command_buffer, 3, 1, 0, 0); // TODO
-        vkCmdEndRenderPass(command_buffer);
+        vkCmdBindDescriptorSets(
+            document.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline_layout.get(), 0, 1, &descriptor_set, 0, nullptr
+        );
+        vkCmdDraw(document.command_buffer, action.vertex_count, 1, 0, 0);
+        vkCmdEndRenderPass(document.command_buffer);
 
-        view_actions[i] = {
+        document.render_program_actions.push_back(render_program_action{
             .pipeline_layout = std::move(pipeline_layout),
             .pipeline = std::move(pipeline),
             .framebuffer = std::move(framebuffer),
             .render_pass = std::move(render_pass),
-        };
+            .uniform_buffer = std::move(uniform_buffer),
+            .uniform_memory = std::move(uniform_memory),
+            .descriptor_pool = std::move(descriptor_pool),
+            .uniform_data = uniform_data,
+        });
+    }
+    void operator() (const std::unique_ptr<blit_action> &) {
+
+    }
+};
+
+render_document::render_document(
+    unsigned width, unsigned height,
+    const document &document, const renderer &renderer,
+    VkImage output, VkFormat output_format, VkImageLayout output_layout,
+    VkCommandPool graphics_command_pool
+
+) :
+    width(width), height(height),
+    render_program_actions(document.view_actions.size())
+{
+
+    VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    vkCreateFence(
+        *current_device, &fence_info, nullptr, out_ptr(fence)
+    );
+    VkSemaphoreCreateInfo semaphore_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    vkCreateSemaphore(
+        *current_device, &semaphore_info, nullptr,
+        out_ptr(render_finished_semaphore)
+    );
+
+    for (size_t i = 0; i < document.textures.size(); i++) {
+        // TODO: create images and image views
+    }
+
+    VkCommandBufferAllocateInfo command_buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = graphics_command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    check(vkAllocateCommandBuffers(
+        *current_device, &command_buffer_info, &command_buffer
+    ));
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    check(vkBeginCommandBuffer(command_buffer, &begin_info));
+
+    VkImageViewCreateInfo image_view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = output,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = output_format,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }
+    };
+    vkCreateImageView(
+        *current_device, &image_view_info, nullptr,
+        out_ptr(this->output_view)
+    );
+
+    for (size_t i = 0; i < document.view_actions.size(); i++) {
+        // TODO: multi-thread shader compilation
+        // TODO: multi-thread pipeline compilation
+
+        std::visit(
+            compile_action_functor{renderer, *this, output_layout},
+            document.view_actions[i]
+        );
     }
 
     check(vkEndCommandBuffer(command_buffer));

@@ -21,13 +21,33 @@ document from_file(const char* file_name) {
     auto call = d.view_actions.begin();
 
     for (; json_call != actions.end(); ++json_call, ++call) {
-        auto& shaders = json_call.value().at("shaders");
+        auto type = json_call.value().at("type").get<std::string>();
 
-        call->vertex_shader = shaders.at("vertex").get<std::string>();
-        call->fragment_shader = shaders.at("fragment").get<std::string>();
-        call->viewport_width = 1280;
-        call->viewport_height = 720;
-        call->out.push_back({"outColor", {0, texture_usage::present}});
+        if (type == "program") {
+            auto action = std::make_unique<program_action>();
+
+            auto& shaders = json_call.value().at("shaders");
+
+            action->vertex_shader = shaders.at("vertex").get<std::string>();
+            action->fragment_shader = shaders.at("fragment").get<std::string>();
+            action->viewport_width = 1280;
+            action->viewport_height = 720;
+            action->vertex_count =
+                json_call.value().at("vertex_count").get<int>();
+            action->out.push_back({"outColor", 0});
+
+            *call = std::move(action);
+
+        } else if (type == "blit") {
+            auto action = std::make_unique<blit_action>();
+
+
+
+            *call = std::move(action);
+
+        } else {
+            throw std::runtime_error("unsupported type");
+        }
     }
 
     return d;

@@ -27,7 +27,7 @@ struct unique_vulkan_resource {
         return *this;
     }
 
-    T get() {
+    const T& get() {
         return value;
     };
 
@@ -52,6 +52,10 @@ typedef unique_vulkan_resource<VkImageView, vkDestroyImageView>
 typedef unique_vulkan_resource<VkPipelineLayout, vkDestroyPipelineLayout>
     unique_pipeline_layout;
 
+typedef unique_vulkan_resource<
+    VkDescriptorSetLayout, vkDestroyDescriptorSetLayout
+> unique_descriptor_set_layout;
+
 typedef unique_vulkan_resource<VkRenderPass, vkDestroyRenderPass>
     unique_render_pass;
 
@@ -65,6 +69,16 @@ typedef unique_vulkan_resource<VkSemaphore, vkDestroySemaphore>
 
 typedef unique_vulkan_resource<VkSwapchainKHR, vkDestroySwapchainKHR>
     unique_swapchain;
+
+typedef unique_vulkan_resource<VkBuffer, vkDestroyBuffer>
+    unique_buffer;
+
+typedef unique_vulkan_resource<VkDeviceMemory, vkFreeMemory>
+    unique_device_memory;
+
+typedef unique_vulkan_resource<VkDescriptorPool, vkDestroyDescriptorPool>
+    unique_descriptor_pool;
+
 
 template<class Smart, class Pointer>
 struct out_ptr_t {

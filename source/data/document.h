@@ -5,12 +5,17 @@
 #include <unordered_map>
 #include <utility>
 #include <variant>
-#include <string_view>
+#include <memory>
 
 #include <glm/glm.hpp>
 
 enum built_in_textures : unsigned {
     built_in_window = 1024,
+};
+
+enum built_in_variables : unsigned {
+    window_width, window_height,
+    view_matrix, projection_matrix,
 };
 
 enum struct format {
@@ -31,23 +36,28 @@ struct texture_definition {
     format format;
 };
 
-struct texture_binding {
-    unsigned texture;
-    texture_usage next_usage;
-};
-
 typedef std::variant<
     int, unsigned, float, glm::vec4, glm::mat4
 > uniform_value;
 
-struct action {
+struct program_action {
     std::vector<std::pair<std::string, uniform_value>> uniforms;
 
     std::string vertex_shader, fragment_shader;
     std::vector<std::pair<std::string, unsigned>> in;
-    std::vector<std::pair<std::string, texture_binding>> out;
+    std::vector<std::pair<std::string, unsigned>> out;
     unsigned viewport_width, viewport_height;
+    unsigned vertex_count;
 };
+
+struct blit_action {
+    unsigned source_texture;
+    unsigned destination_texture;
+};
+
+typedef std::variant<
+    std::unique_ptr<program_action>, std::unique_ptr<blit_action>
+> action;
 
 struct document {
     std::unordered_map<std::string, texture_definition> textures;
