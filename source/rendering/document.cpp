@@ -19,6 +19,9 @@ struct compile_action_functor {
             shaderc_glsl_fragment_shader
         );
 
+        auto descriptor_size =
+            vertex_shader.descriptor_size + fragment_shader.descriptor_size;
+
         VkDescriptorSetLayoutBinding descriptor_set_layout_binding = {
             .binding = 0,
             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -39,7 +42,7 @@ struct compile_action_functor {
         uint32_t queue_family_index = renderer.graphics_queue_family;
         VkBufferCreateInfo uniform_buffer_info = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .size = vertex_shader.descriptor_size,
+            .size = descriptor_size,
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 1,
@@ -48,7 +51,7 @@ struct compile_action_functor {
         unique_buffer uniform_buffer;
         unique_device_memory uniform_memory;
         void* uniform_data;
-        if (vertex_shader.descriptor_size > 0) {
+        if (descriptor_size > 0) {
             check(vkCreateBuffer(
                 *current_device, &uniform_buffer_info, nullptr,
                 out_ptr(uniform_buffer)
@@ -95,16 +98,22 @@ struct compile_action_functor {
 
             vkMapMemory(
                 *current_device, uniform_memory.get(), 0,
-                vertex_shader.descriptor_size, 0, &uniform_data
+                descriptor_size, 0, &uniform_data
             );
 
             for (const auto& uniform : action.uniforms) {
                 auto span = get_data_pointer(uniform.second);
-                memcpy(
-                    reinterpret_cast<uint8_t*>(uniform_data) +
-                    vertex_shader.descriptor_offsets[uniform.first],
-                    span.first, span.second
-                );
+                for (auto shader : {&vertex_shader, &fragment_shader}) {
+                    auto offset =
+                        shader->descriptor_offsets.find(uniform.first);
+                    if (offset != shader->descriptor_offsets.end()) {
+                        memcpy(
+                            reinterpret_cast<uint8_t*>(uniform_data) +
+                            offset->second,
+                            span.first, span.second
+                        );
+                    }
+                }
             }
         }
 
@@ -137,7 +146,7 @@ struct compile_action_functor {
         VkDescriptorBufferInfo descriptor_buffer_info = {
             .buffer = uniform_buffer.get(),
             .offset = 0,
-            .range = vertex_shader.descriptor_size,
+            .range = descriptor_size,
         };
         VkWriteDescriptorSet write_descriptor_set = {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
