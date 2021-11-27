@@ -42,7 +42,9 @@
                 "color": "built_in_window"
             },
             "uniforms": {
-                "color": [0.35, 0.62, 0.95, 1.0]
+                "color": [0.35, 0.62, 0.95, 1.0],
+                "background_color": [1.0, 1.0, 1.0, 1.0],
+                "radius": 0.25
             },
             "viewport": ["built_in_window_width", "built_in_window_height"]
         }, {

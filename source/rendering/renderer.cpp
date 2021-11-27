@@ -14,6 +14,7 @@ renderer::renderer() {
         shaderc_optimization_level_performance
     );
     compiler_options.SetAutoBindUniforms(true);
+    compiler_options.SetAutoMapLocations(true);
     compiler_options.SetGenerateDebugInfo();
 }
 
@@ -21,6 +22,7 @@ reflected_shader_module create_shader_from_source(
     const renderer &renderer, VkDevice device, const char *file_name,
     shaderc_shader_kind kind
 ) {
+    // TODO: move this to constructor of reflected_shader_module
     std::ifstream file(file_name, std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {

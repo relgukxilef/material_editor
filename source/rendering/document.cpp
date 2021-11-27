@@ -97,8 +97,15 @@ struct compile_action_functor {
                 *current_device, uniform_memory.get(), 0,
                 vertex_shader.descriptor_size, 0, &uniform_data
             );
-            std::array<float, 4> color = {0.5, 1.0, 1.0, 0.0};
-            memcpy(uniform_data, color.begin(), sizeof(color));
+
+            for (const auto& uniform : action.uniforms) {
+                auto span = get_data_pointer(uniform.second);
+                memcpy(
+                    reinterpret_cast<uint8_t*>(uniform_data) +
+                    vertex_shader.descriptor_offsets[uniform.first],
+                    span.first, span.second
+                );
+            }
         }
 
         VkDescriptorPoolSize pool_size = {

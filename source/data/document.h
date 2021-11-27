@@ -37,8 +37,10 @@ struct texture_definition {
 };
 
 typedef std::variant<
-    int, unsigned, float, glm::vec4, glm::mat4
+    float, glm::vec4, glm::mat4
 > uniform_value;
+
+std::pair<const void*, unsigned> get_data_pointer(const uniform_value& value);
 
 struct program_action {
     std::vector<std::pair<std::string, uniform_value>> uniforms;
