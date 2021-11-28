@@ -8,12 +8,12 @@ struct compile_action_functor {
     void operator() (const std::unique_ptr<program_action> &action_pointer) {
         auto &action = *action_pointer;
 
-        reflected_shader_module vertex_shader = create_shader_from_source(
+        reflected_shader_module vertex_shader(
             renderer, *current_device,
             ("examples/" + action.vertex_shader).c_str(), // TODO
             shaderc_glsl_vertex_shader
         );
-        reflected_shader_module fragment_shader = create_shader_from_source(
+        reflected_shader_module fragment_shader(
             renderer, *current_device,
             ("examples/" + action.fragment_shader).c_str(), // TODO
             shaderc_glsl_fragment_shader

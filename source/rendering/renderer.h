@@ -7,7 +7,6 @@
 #include <shaderc/shaderc.hpp>
 
 #include "resources.h"
-#include "shader.h"
 
 struct renderer {
     renderer();
@@ -19,11 +18,6 @@ struct renderer {
     uint32_t graphics_queue_family, present_queue_family;
     VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
 };
-
-reflected_shader_module create_shader_from_source(
-    const renderer &renderer, VkDevice device, const char* file_name,
-    shaderc_shader_kind kind
-);
 
 struct out_of_memory_error : public std::bad_alloc {
     out_of_memory_error() : std::bad_alloc() {}

@@ -335,6 +335,10 @@ int main() {
     }
 
     // create queues and logical device
+    // TODO: move VkDevice into renderer
+    // maybe move VkPhysicalDevice too
+    // on VK_ERROR_DEVICE_LOST try to recreate the VkDevice
+    // if that fails try to look for another VkPhysicalDevice
     VkDevice device;
     current_device = &device;
     {

@@ -5,6 +5,7 @@
 #include "../data/document.h"
 #include "resources.h"
 #include "renderer.h"
+#include "shader.h"
 
 struct render_program_action {
     unique_pipeline_layout pipeline_layout;
