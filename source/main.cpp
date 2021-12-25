@@ -180,8 +180,10 @@ int main() {
     );
 
     // check support for layers
-    const char* enabled_layers[]{
+    std::initializer_list<const char*> enabled_layers = {
+#ifdef EDITOR_VULKAN_VALIDATION
         "VK_LAYER_KHRONOS_validation",
+#endif
     };
 
     uint32_t layer_count;
@@ -203,8 +205,10 @@ int main() {
     }
 
     // create instance
-    const char *requiredExtensions[]{
+    std::initializer_list<const char*> requiredExtensions = {
+#ifdef EDITOR_VULKAN_VALIDATION
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+#endif
     };
     auto extensionCount = size(requiredExtensions) + glfw_extension_count;
     auto extensions = make_unique<const char*[]>(extensionCount);
@@ -213,7 +217,7 @@ int main() {
         extensions.get()
     );
     std::copy(
-        requiredExtensions, requiredExtensions + size(requiredExtensions),
+        requiredExtensions.begin(), requiredExtensions.end(),
         extensions.get() + glfw_extension_count
     );
     VkInstance instance;
@@ -222,8 +226,8 @@ int main() {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pNext = &debugUtilsMessengerCreateInfo,
             .pApplicationInfo = &applicationInfo,
-            .enabledLayerCount = std::size(enabled_layers),
-            .ppEnabledLayerNames = enabled_layers,
+            .enabledLayerCount = static_cast<uint32_t>(enabled_layers.size()),
+            .ppEnabledLayerNames = enabled_layers.begin(),
             .enabledExtensionCount = static_cast<uint32_t>(extensionCount),
             .ppEnabledExtensionNames = extensions.get(),
         };
@@ -231,6 +235,7 @@ int main() {
     }
 
     // create debug utils messenger
+#ifdef EDITOR_VULKAN_VALIDATION
     auto vkCreateDebugUtilsMessengerEXT =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
             instance, "vkCreateDebugUtilsMessengerEXT"
@@ -257,6 +262,7 @@ int main() {
             instance, &createInfo, nullptr, &debugUtilsMessenger
         ));
     }
+#endif
 
     // create surface
     VkSurfaceKHR surface;
@@ -559,7 +565,9 @@ int main() {
 
     vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyDevice(device, nullptr);
+#ifdef EDITOR_VULKAN_VALIDATION
     vkDestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
+#endif
     vkDestroyInstance(instance, nullptr);
 
     glfwDestroyWindow(window);

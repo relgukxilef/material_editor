@@ -19,3 +19,5 @@ target_include_directories(
 
 target_compile_definitions(material_editor PRIVATE _GLIBCXX_DEBUG)
 target_compile_options(material_editor PRIVATE -Wall -Werror)
+
+target_compile_definitions(material_editor PRIVATE EDITOR_VULKAN_VALIDATION)
